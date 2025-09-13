@@ -7,8 +7,6 @@ RUN mkdir -p $bin
 WORKDIR $bin
 COPY . .
 
-# sync dependencies
-RUN uv sync
 
 # the execution will happen in the folder /workdir/exec
 # it will be created by IPOL
@@ -23,3 +21,6 @@ ENV HOME /home/ipol
 # chmod 777 so that any user can use the HOME, in case the docker is run with -u 1001:1001
 RUN groupadd -g 1000 ipol && useradd -m -u 1000 -g 1000 ipol -d $HOME && chmod -R 777 $HOME
 USER ipol
+
+# sync dependencies
+RUN uv sync
