@@ -46,7 +46,7 @@ You can also have nested subfolders under `real/` and `fake/` (recursively scann
 
 ## 🏋️ Training a model (fixed config)
 
-To train a model with a specific configuration (no Optuna search):
+To train a model with a specific configuration:
 
 1. Prepare a configuration file (JSON or joblib).  
    Example `config.json`:
