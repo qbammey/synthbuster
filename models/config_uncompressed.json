@@ -1,0 +1,25 @@
+{
+  "dataset_root": "data",
+  "file_extension": ".png",
+  "jpeg_spec": {
+    "mode": "none",
+    "quality": null,
+    "qmin": null,
+    "qmax": null,
+    "seed": null
+  },
+  "preprocess": {
+    "method": "cross",
+    "rank_sz": 4,
+    "max_period": 16
+  },
+  "hgb_params": {
+    "learning_rate": 0.24395021823517507,
+    "max_iter": 800,
+    "max_depth": 5,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 100,
+    "l2_regularization": 0.00662914922757653,
+    "random_state": 8730
+  }
+}
