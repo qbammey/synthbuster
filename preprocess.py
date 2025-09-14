@@ -1,6 +1,5 @@
 # preprocess.py
 import numpy as np
-from numba import jit, njit, prange
 
 
 def compute_cross_difference(img: np.ndarray) -> np.ndarray:
@@ -64,88 +63,6 @@ def compute_cross_difference(img: np.ndarray) -> np.ndarray:
 
     return cross
 
-@njit(parallel=True, fastmath=True, cache=True)
-def _rank_transform_2d_uint8_sliding(image_2d: np.ndarray, sz: int) -> np.ndarray:
-    """
-    FAST rank transform for a single-channel uint8 image using a sliding-window histogram.
-
-    For each pixel (y, x) with y,x in [sz, Y-sz) and [sz, X-sz):
-      - Maintain a rolling 256-bin histogram of the local (2*sz+1)x(2*sz+1) window.
-      - When moving x -> x+1, remove the leftmost column and add the new rightmost column.
-      - Rank(anchor) = sum_{i < anchor} hist[i] + 0.5 * hist[anchor].
-      - Normalize: (rank - 0.5) / ((2*sz+1)^2 - 1).
-    Border pixels (<sz from any edge) are left at 0.
-
-    Parameters
-    ----------
-    image_2d : np.ndarray
-        2D uint8 array (Y, X), contiguous.
-    sz : int
-        Half-window size (>=1).
-
-    Returns
-    -------
-    np.ndarray
-        float32 (Y, X) in [0, 1], with borders left as 0.
-    """
-    Y, X = image_2d.shape
-    out = np.zeros((Y, X), dtype=np.float32)
-
-    win_h = 2 * sz + 1
-    win_w = 2 * sz + 1
-    N = win_h * win_w
-    denom = float(N - 1)
-
-    # Process each row independently in parallel
-    for y in prange(sz, Y - sz):
-        # Initialize histogram at x = sz for the window centered at (y, sz)
-        hist = np.zeros(256, dtype=np.int32)
-
-        # Build initial window histogram (cost O(N))
-        y_top = y - sz
-        y_bot = y + sz
-        for yy in range(y_top, y_bot + 1):
-            for xx in range(0, win_w):  # window spans x in [0 .. 2*sz] centered at sz
-                v = image_2d[yy, xx]
-                hist[v] += 1
-
-        # Compute rank for x = sz
-        x = sz
-        anchor = image_2d[y, x]
-        # prefix sum up to anchor-1
-        less = 0
-        for t in range(anchor):
-            less += hist[t]
-        eq = hist[anchor]
-        rank = less + 0.5 * eq
-        out[y, x] = (rank - 0.5) / denom
-
-        # Slide along the row: x = sz+1 .. X-sz-1
-        for x in range(sz + 1, X - sz):
-            # Remove left column at x_left = x - sz - 1; Add right column at x_right = x + sz
-            x_left = x - sz - 1
-            x_right = x + sz
-
-            # Remove old column
-            for yy in range(y_top, y_bot + 1):
-                v = image_2d[yy, x_left]
-                hist[v] -= 1
-            # Add new column
-            for yy in range(y_top, y_bot + 1):
-                v = image_2d[yy, x_right]
-                hist[v] += 1
-
-            anchor = image_2d[y, x]
-            # rank = (#<anchor) + 0.5*(#==anchor); compute (#<anchor) via partial prefix
-            less = 0
-            for t in range(anchor):
-                less += hist[t]
-            eq = hist[anchor]
-            rank = less + 0.5 * eq
-            out[y, x] = (rank - 0.5) / denom
-
-    return out
-
 
 def _ensure_uint8(image: np.ndarray) -> np.ndarray:
     """
@@ -170,56 +87,6 @@ def _ensure_uint8(image: np.ndarray) -> np.ndarray:
     else:
         img = np.clip(img, 0, 255)
     return np.ascontiguousarray(img.astype(np.uint8, copy=False))
-
-
-def rank_transform(image: np.ndarray, sz: int) -> np.ndarray:
-    """
-    FAST rank transform (channel-wise) using a sliding-window histogram for uint8.
-
-    - Accepts grayscale (Y, X) or RGB (Y, X, 3).
-    - Quantizes to uint8 if needed, then applies the fast 2D kernel per channel.
-    - Returns float32 in [0, 1], borders of width `sz` are 0.
-
-    Parameters
-    ----------
-    image : np.ndarray
-        (Y, X) or (Y, X, C) numeric array.
-    sz : int
-        Half-window size (>=1); window size is (2*sz+1)^2.
-
-    Returns
-    -------
-    np.ndarray
-        Same shape as input, dtype float32, values in [0,1].
-    """
-    if sz < 1:
-        raise ValueError(f"`sz` must be >= 1, got {sz}.")
-
-    if image.ndim == 2:
-        Y, X = image.shape
-        if Y < 2 * sz + 1 or X < 2 * sz + 1:
-            raise ValueError(
-                f"Image too small for window size sz={sz}. "
-                f"Need Y >= {2*sz+1} and X >= {2*sz+1}, got shape {image.shape}."
-            )
-        img_u8 = _ensure_uint8(image)
-        return _rank_transform_2d_uint8_sliding(img_u8, sz)
-
-    if image.ndim == 3:
-        Y, X, C = image.shape
-        if Y < 2 * sz + 1 or X < 2 * sz + 1:
-            raise ValueError(
-                f"Image too small for window size sz={sz}. "
-                f"Need Y >= {2*sz+1} and X >= {2*sz+1}, got shape {image.shape}."
-            )
-        img_u8 = _ensure_uint8(image)
-        out = np.zeros((Y, X, C), dtype=np.float32)
-        for c in range(C):
-            out[..., c] = _rank_transform_2d_uint8_sliding(img_u8[..., c], sz)
-        return out
-
-    raise ValueError(f"`image` must be 2D or 3D, got shape {image.shape}.")
-
 
 
 
