@@ -7,20 +7,25 @@ ENV HOME=/home/ipol \
     UV_PYTHON_INSTALL_DIR=/opt/uv/python \
     UV_PROJECT_ENVIRONMENT=/home/ipol/.uv-envs/dr
 
+# Create user and dirs
 RUN groupadd -g 1000 ipol \
  && useradd -m -u 1000 -g 1000 -d "$HOME" ipol \
- && mkdir -p /workdir /opt/uv/python "$UV_CACHE_DIR" /home/ipol/.uv-envs \
- && chown -R ipol:ipol /workdir "$HOME" /opt/uv "$UV_CACHE_DIR" \
+ && mkdir -p /workdir /opt/uv/python "$UV_CACHE_DIR" /home/ipol/.uv-envs "$bin" \
+ && chown -R ipol:ipol /workdir "$HOME" /opt/uv "$UV_CACHE_DIR" "$bin" \
  && chmod -R 755 /opt/uv
 
 USER ipol
 WORKDIR $bin
+
+# Copy code; Docker may still leave the directory root-owned, so fix it explicitly
 COPY --chown=ipol:ipol . .
+RUN chown -R ipol:ipol /workdir/bin
 
-# (optional) sanity check
-RUN id && ls -ld /workdir /workdir/bin && stat -c '%U %G %A %n' /workdir /workdir/bin && touch /workdir/bin/.perm_test && rm /workdir/bin/.perm_test
+# Sanity check (optional)
+RUN id && ls -ld /workdir /workdir/bin && stat -c '%U %G %A %n' /workdir /workdir/bin \
+ && touch /workdir/bin/.perm_test && rm /workdir/bin/.perm_test
 
-# create env outside the project; avoids /workdir/bin/.venv
+# Create env (outside project) and install deps
 RUN uv sync
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
