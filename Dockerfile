@@ -30,7 +30,7 @@ RUN chown -R ipol:ipol /workdir /workdir/bin
 
 # ---- Build step: disable uv cache to avoid stale/permissioned cache paths ----
 # Use a throwaway cache dir under /tmp and bypass caching entirely for the build.
-ENV UV_NO_CACHE=1
+ENV UV_NO_CACHE=
 ENV UV_CACHE_DIR=/tmp/uv-build-cache
 RUN rm -rf "$UV_CACHE_DIR" && mkdir -p "$UV_CACHE_DIR"
 
