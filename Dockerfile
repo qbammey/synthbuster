@@ -1,38 +1,44 @@
 FROM registry.ipol.im/ipol:v2-py3.11
+
+# Install uv binaries
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Create runtime user & dirs (as root)
-ENV HOME=/home/ipol
+# --- Paths and defaults ---
+ENV HOME=/home/ipol \
+    bin=/workdir/bin \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python \
+    # Put uv-managed Pythons somewhere ipol can write
+    UV_PYTHON_INSTALL_DIR=/home/ipol/.local/share/uv/python \
+    # Keep the project env outside the repo tree
+    UV_PROJECT_ENVIRONMENT=/home/ipol/.uv-envs/dr \
+    # Build without caches to dodge stale permission artifacts
+    UV_NO_CACHE=1 \
+    # Use a throwaway cache dir during build
+    UV_CACHE_DIR=/tmp/uv-build-cache
+
+# --- Create user and writable dirs as root ---
 RUN groupadd -g 1000 ipol \
  && useradd -m -u 1000 -g 1000 -d "$HOME" ipol \
- && mkdir -p /workdir /workdir/bin /home/ipol/.uv-envs /opt/uv/python \
- && chown -R ipol:ipol /workdir "$HOME" /home/ipol/.uv-envs \
- && chmod -R 755 /opt/uv   # readable/traversable by all
+ && mkdir -p /workdir "$bin" "$UV_PYTHON_INSTALL_DIR" /home/ipol/.uv-envs "$UV_CACHE_DIR" \
+ && chown -R ipol:ipol /workdir "$HOME" "$UV_PYTHON_INSTALL_DIR" /home/ipol/.uv-envs "$UV_CACHE_DIR"
 
-# Switch to runtime user
+# --- Switch to runtime user before touching project ---
 USER ipol
-ENV bin=/workdir/bin
 WORKDIR $bin
 
-# Copy project
+# Copy project files owned by ipol
 COPY --chown=ipol:ipol . .
 
-# uv settings:
-# - No cache (avoid permission flakes)
-# - Managed interpreters live in /opt/uv/python (world-readable)
-# - Project env outside repo
-ENV UV_NO_CACHE=1 \
-    UV_PYTHON_INSTALL_DIR=/opt/uv/python \
-    UV_PROJECT_ENVIRONMENT=/home/ipol/.uv-envs/dr
+# Ensure build cache dir exists and is clean
+RUN rm -rf "$UV_CACHE_DIR" && mkdir -p "$UV_CACHE_DIR"
 
-# Belt & braces: remove any stray caches
-RUN rm -rf /home/ipol/.uv-cache /root/.cache/uv /tmp/uv-cache || true
-
-# Create env (uv will install Python 3.13 to /opt/uv/python per >=3.12 and .python-version=3.13)
+# Install: uv will (a) install CPython per pyproject/.python-version into $UV_PYTHON_INSTALL_DIR,
+#          (b) create the env at $UV_PROJECT_ENVIRONMENT, all writable by ipol.
 RUN uv sync
 
-# QoL
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python \
+# Optional: for runtime you can re-enable caching and use a home cache dir
+ENV UV_NO_CACHE=0 \
+    UV_CACHE_DIR=/home/ipol/.uv-cache \
     PATH=$bin:$PATH
 
