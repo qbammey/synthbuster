@@ -1,31 +1,25 @@
 FROM registry.ipol.im/ipol:v2-py3.11
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy the code to $bin
-ENV bin /workdir/bin/
-RUN mkdir -p $bin
+ENV HOME=/home/ipol \
+    bin=/workdir/bin \
+    UV_CACHE_DIR=/home/ipol/.uv-cache \
+    UV_PYTHON_INSTALL_DIR=/opt/uv/python   # optional: world-readable interpreters
 
-
-# the execution will happen in the folder /workdir/exec
-# it will be created by IPOL
-
-# some QoL tweaks
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION python
-ENV PATH $bin:$PATH
-
-# $HOME is writable by the user `ipol`, but 
-ENV HOME /home/ipol
-# chmod 777 so that any user can use the HOME, in case the docker is run with -u 1001:1001
-RUN groupadd -g 1000 ipol && useradd -m -u 1000 -g 1000 ipol -d $HOME && chmod -R 777 $HOME
-RUN chmod -R 777 $bin
+RUN groupadd -g 1000 ipol \
+ && useradd -m -u 1000 -g 1000 -d "$HOME" ipol \
+ && mkdir -p /workdir /opt/uv/python "$UV_CACHE_DIR" \
+ && chown -R ipol:ipol /workdir "$HOME" /opt/uv "$UV_CACHE_DIR" \
+ && chmod -R 755 /opt/uv
 
 USER ipol
-
 WORKDIR $bin
-# Copy code and environment lockfile
 COPY --chown=ipol:ipol . .
-# sync dependencies
+
+# Create venv and cache owned by ipol
 RUN uv sync
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python \
+    PATH=$bin:$PATH
 
