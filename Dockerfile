@@ -4,7 +4,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 ENV HOME=/home/ipol \
     bin=/workdir/bin \
     UV_CACHE_DIR=/home/ipol/.uv-cache \
-    UV_PYTHON_INSTALL_DIR=/opt/uv/python   # optional: world-readable interpreters
+    UV_PYTHON_INSTALL_DIR=/opt/uv/python
+# optional last line: world-readable interpreters
 
 RUN groupadd -g 1000 ipol \
  && useradd -m -u 1000 -g 1000 -d "$HOME" ipol \
