@@ -1,41 +1,42 @@
-# ---- Base image ----
 FROM registry.ipol.im/ipol:v2-py3.11
 
-# ---- Install uv ----
+# uv binaries
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# ---- Common env ----
-ENV HOME=/home/ipol \
-    bin=/workdir/bin \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python \
-    UV_PYTHON_INSTALL_DIR=/opt/uv/python \
-    UV_PROJECT_ENVIRONMENT=/home/ipol/.uv-envs/dr \
-    # Use a throwaway cache under /tmp for both build & runtime
-    UV_CACHE_DIR=/tmp/uv-cache
-
-# Create runtime user & dirs (as root)
+# Create runtime user & dirs first
+ENV HOME=/home/ipol
 RUN groupadd -g 1000 ipol \
  && useradd -m -u 1000 -g 1000 -d "$HOME" ipol \
- && mkdir -p /workdir "$bin" /opt/uv/python /home/ipol/.uv-envs "$UV_CACHE_DIR" \
- && rm -rf /home/ipol/.uv-cache  \
- && chown -R ipol:ipol /workdir "$HOME" /opt/uv /home/ipol/.uv-envs "$UV_CACHE_DIR" \
- && chmod -R 755 /opt/uv
+ && mkdir -p /workdir /home/ipol/.uv-envs \
+ && chown -R ipol:ipol /workdir "$HOME"
 
-# ---- Switch to user BEFORE copying/syncing ----
+# Switch to runtime user before we touch the project
 USER ipol
+
+# Project root inside the image
+ENV bin=/workdir/bin
 WORKDIR $bin
 
-# Copy project and make sure /workdir/bin is writable by ipol
+# Copy code and ensure ownership of the directory itself
 COPY --chown=ipol:ipol . .
 RUN chown -R ipol:ipol /workdir /workdir/bin
 
-# Prepare cache dir under /tmp (owned by ipol)
-RUN rm -rf "$UV_CACHE_DIR" && mkdir -p "$UV_CACHE_DIR"
+# -------- uv settings (make it permission-proof) --------
+# 1) Don’t use any cache at build or runtime (prevents stale root-owned cache reads)
+ENV UV_NO_CACHE=1
+# 2) Use system Python from the base image, avoid uv-managed interpreters entirely
+ENV UV_PYTHON=/usr/local/bin/python3.11
+# 3) Keep the environment OUTSIDE the project tree
+ENV UV_PROJECT_ENVIRONMENT=/home/ipol/.uv-envs/dr
 
-# Create the environment OUTSIDE the project folder and install deps
+# Nuke any stray caches that might exist in the base image layers (belt & braces)
+RUN rm -rf /home/ipol/.uv-cache /root/.cache/uv /tmp/uv-cache || true
+
+# Create the environment and install deps
 RUN uv sync
 
 # QoL
-ENV PATH=$bin:$PATH
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python \
+    PATH=$bin:$PATH
 
